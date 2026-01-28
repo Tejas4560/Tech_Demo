@@ -4,10 +4,20 @@ on:
   # Manual trigger with custom parameters
   workflow_dispatch:
     inputs:
-      target_directory:
-        description: 'Target directory to analyze (e.g., Backend_code, flask_high_coverage_repo/src)'
+      repo_url:
+        description: 'Repository URL to clone and analyze (e.g., https://github.com/user/repo.git) - Leave empty to use local code'
         required: false
-        default: 'Backend_code'
+        default: ''
+        type: string
+      repo_branch:
+        description: 'Branch to checkout (default: main)'
+        required: false
+        default: 'main'
+        type: string
+      target_directory:
+        description: 'Target directory to analyze within the repo (e.g., src, app, Backend_code)'
+        required: false
+        default: ''
         type: string
       iterations:
         description: 'Maximum number of iterations'
@@ -45,6 +55,7 @@ env:
   DEFAULT_ITERATIONS: '3'
   DEFAULT_COVERAGE: '90'
   DEFAULT_OUTDIR: 'tests/generated'
+  CLONED_REPO_DIR: 'target_repo'
 
 jobs:
   ai-test-generation:
@@ -64,6 +75,16 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
       
+      - name: Clone Target Repository (if URL provided)
+        if: github.event.inputs.repo_url != ''
+        run: |
+          echo "🔄 Cloning repository: ${{ inputs.repo_url }}"
+          git clone --branch ${{ inputs.repo_branch }} ${{ inputs.repo_url }} ${{ env.CLONED_REPO_DIR }}
+          echo "✅ Repository cloned successfully"
+          echo ""
+          echo "📁 Cloned repository contents:"
+          ls -la ${{ env.CLONED_REPO_DIR }}
+      
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
@@ -72,20 +93,48 @@ jobs:
       
       - name: Configure Environment Variables
         run: |
-          # Set target directory (use input or default)
+          # Determine if we're using a cloned repo or local code
+          if [ -n "${{ inputs.repo_url }}" ]; then
+            # Using cloned repository
+            if [ -n "${{ inputs.target_directory }}" ]; then
+              # User specified a subdirectory within the cloned repo
+              TARGET="${{ env.CLONED_REPO_DIR }}/${{ inputs.target_directory }}"
+            else
+              # Auto-detect source directory in cloned repo
+              if [ -d "${{ env.CLONED_REPO_DIR }}/src" ]; then
+                TARGET="${{ env.CLONED_REPO_DIR }}/src"
+              elif [ -d "${{ env.CLONED_REPO_DIR }}/app" ]; then
+                TARGET="${{ env.CLONED_REPO_DIR }}/app"
+              else
+                # Use the root of cloned repo
+                TARGET="${{ env.CLONED_REPO_DIR }}"
+              fi
+            fi
+          else
+            # Using local code (current repo)
+            if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.target_directory }}" ]; then
+              TARGET="${{ inputs.target_directory }}"
+            else
+              TARGET="${{ env.DEFAULT_TARGET }}"
+            fi
+          fi
+          
+          echo "TARGET_DIR=$TARGET" >> $GITHUB_ENV
+          
+          # Set other parameters
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "TARGET_DIR=${{ inputs.target_directory }}" >> $GITHUB_ENV
             echo "ITERATIONS=${{ inputs.iterations }}" >> $GITHUB_ENV
             echo "TARGET_COV=${{ inputs.target_coverage }}" >> $GITHUB_ENV
             echo "OUT_DIR=${{ inputs.output_directory }}" >> $GITHUB_ENV
           else
-            echo "TARGET_DIR=${{ env.DEFAULT_TARGET }}" >> $GITHUB_ENV
             echo "ITERATIONS=${{ env.DEFAULT_ITERATIONS }}" >> $GITHUB_ENV
             echo "TARGET_COV=${{ env.DEFAULT_COVERAGE }}" >> $GITHUB_ENV
             echo "OUT_DIR=${{ env.DEFAULT_OUTDIR }}" >> $GITHUB_ENV
           fi
           
           echo "📋 Configuration:"
+          echo "  Repository URL: ${{ inputs.repo_url }}"
+          echo "  Branch: ${{ inputs.repo_branch }}"
           echo "  Target: $TARGET_DIR"
           echo "  Iterations: $ITERATIONS"
           echo "  Coverage Target: $TARGET_COV%"
@@ -171,6 +220,10 @@ jobs:
           
           # Configuration
           echo "## ⚙️ Configuration" >> $GITHUB_STEP_SUMMARY
+          if [ -n "${{ inputs.repo_url }}" ]; then
+            echo "- **Repository:** ${{ inputs.repo_url }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Branch:** ${{ inputs.repo_branch }}" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "- **Target Directory:** \`${{ env.TARGET_DIR }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Max Iterations:** ${{ env.ITERATIONS }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Target Coverage:** ${{ env.TARGET_COV }}%" >> $GITHUB_STEP_SUMMARY
