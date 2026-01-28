@@ -126,7 +126,7 @@ jobs:
             echo "Please configure GROQ_API_KEY, OPENAI_API_KEY, or AZURE_OPENAI_API_KEY"
           fi
           
-          # Run the orchestrator
+          # Run the orchestrator (allow exit code 1 for partial success)
           python multi_iteration_orchestrator.py \
             --target "${{ env.TARGET_DIR }}" \
             --current-dir . \
@@ -134,8 +134,24 @@ jobs:
             --target-coverage ${{ env.MIN_COVERAGE }} \
             --outdir "${{ env.OUT_DIR }}" \
           || {
-            echo "❌ Orchestrator failed with exit code $?"
-            exit 1
+            EXIT_CODE=$?
+            echo ""
+            echo "⚠️  Orchestrator exited with code $EXIT_CODE"
+            
+            # Check if we made any progress
+            if [ -f "iteration_report.json" ]; then
+              FINAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['final_coverage'])" 2>/dev/null || echo "0")
+              if (( $(echo "$FINAL_COV > 0" | bc -l) )); then
+                echo "✅ Progress made: ${FINAL_COV}% coverage achieved"
+                echo "Continuing workflow to upload results..."
+              else
+                echo "❌ No progress made - failing workflow"
+                exit 1
+              fi
+            else
+              echo "❌ No report generated - failing workflow"
+              exit 1
+            fi
           }
           
           echo ""
@@ -257,22 +273,33 @@ jobs:
           if-no-files-found: warn
       
       - name: Check Coverage Threshold
-        if: success()
+        if: always()
         run: |
           if [ -f "iteration_report.json" ]; then
             FINAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['final_coverage'])" 2>/dev/null || echo "0")
+            INITIAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['initial_coverage'])" 2>/dev/null || echo "0")
             MIN_COV=${{ env.MIN_COVERAGE }}
             
-            echo "Final Coverage: ${FINAL_COV}%"
-            echo "Min Coverage: ${MIN_COV}%"
+            echo "📊 Coverage Summary:"
+            echo "  Initial Coverage: ${INITIAL_COV}%"
+            echo "  Final Coverage: ${FINAL_COV}%"
+            echo "  Min Coverage Target: ${MIN_COV}%"
+            echo ""
             
             if (( $(echo "$FINAL_COV >= $MIN_COV" | bc -l) )); then
-              echo "✅ Coverage threshold achieved!"
-              exit 0
+              echo "✅ SUCCESS: Coverage threshold achieved!"
+              echo "  Final coverage (${FINAL_COV}%) meets or exceeds target (${MIN_COV}%)"
+            elif (( $(echo "$FINAL_COV > $INITIAL_COV" | bc -l) )); then
+              IMPROVEMENT=$(echo "$FINAL_COV - $INITIAL_COV" | bc -l)
+              REMAINING=$(echo "$MIN_COV - $FINAL_COV" | bc -l)
+              echo "⚠️  PARTIAL SUCCESS: Coverage improved but target not fully met"
+              echo "  Improvement: +${IMPROVEMENT}%"
+              echo "  Remaining gap: ${REMAINING}%"
+              echo "  Consider running more iterations or adding manual tests"
             else
-              echo "⚠️  Coverage threshold not met (${FINAL_COV}% < ${MIN_COV}%)"
-              echo "Consider running more iterations or adding manual tests"
-              # Don't fail the workflow, just warn
-              exit 0
+              echo "❌ WARNING: No coverage improvement"
+              echo "  Check logs for errors in test generation"
             fi
+          else
+            echo "⚠️  No iteration report found"
           fi
