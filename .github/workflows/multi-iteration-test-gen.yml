@@ -1,13 +1,11 @@
 name: Multi-Iteration Test Generation
 
 on:
-  # Manual trigger with custom parameters
   workflow_dispatch:
     inputs:
       repo_url:
-        description: 'Repository URL to clone and analyze (e.g., https://github.com/user/repo.git) - Leave empty to use local code'
-        required: false
-        default: ''
+        description: 'Git repository URL to test (e.g., https://github.com/user/repo.git)'
+        required: true
         type: string
       repo_branch:
         description: 'Branch to checkout (default: main)'
@@ -15,47 +13,25 @@ on:
         default: 'main'
         type: string
       target_directory:
-        description: 'Target directory to analyze within the repo (e.g., src, app, Backend_code)'
+        description: 'Target directory to analyze within the repo (e.g., src, app) - Leave empty for auto-detect'
         required: false
         default: ''
         type: string
       iterations:
-        description: 'Maximum number of iterations'
+        description: 'Maximum number of iterations (default: 3)'
         required: false
         default: '3'
         type: string
-      target_coverage:
-        description: 'Target coverage percentage'
+      min_coverage:
+        description: 'Minimum coverage threshold (default: 90)'
         required: false
         default: '90'
         type: string
-      output_directory:
-        description: 'Output directory for generated tests'
-        required: false
-        default: 'tests/generated'
-        type: string
-  
-  # Auto-trigger on pull requests
-  pull_request:
-    branches: [ main, develop ]
-    paths:
-      - '**.py'
-      - 'requirements.txt'
-  
-  # Auto-trigger on push to main
-  push:
-    branches: [ main ]
-    paths:
-      - '**.py'
-      - 'requirements.txt'
 
 env:
   PYTHON_VERSION: '3.10'
-  DEFAULT_TARGET: 'Backend_code'
-  DEFAULT_ITERATIONS: '3'
-  DEFAULT_COVERAGE: '90'
-  DEFAULT_OUTDIR: 'tests/generated'
   CLONED_REPO_DIR: 'target_repo'
+  DEFAULT_OUTDIR: 'tests/generated'
 
 jobs:
   ai-test-generation:
@@ -75,8 +51,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
       
-      - name: Clone Target Repository (if URL provided)
-        if: github.event.inputs.repo_url != ''
+      - name: Clone Target Repository
         run: |
           echo "🔄 Cloning repository: ${{ inputs.repo_url }}"
           git clone --branch ${{ inputs.repo_branch }} ${{ inputs.repo_url }} ${{ env.CLONED_REPO_DIR }}
@@ -93,52 +68,34 @@ jobs:
       
       - name: Configure Environment Variables
         run: |
-          # Determine if we're using a cloned repo or local code
-          if [ -n "${{ inputs.repo_url }}" ]; then
-            # Using cloned repository
-            if [ -n "${{ inputs.target_directory }}" ]; then
-              # User specified a subdirectory within the cloned repo
-              TARGET="${{ env.CLONED_REPO_DIR }}/${{ inputs.target_directory }}"
-            else
-              # Auto-detect source directory in cloned repo
-              if [ -d "${{ env.CLONED_REPO_DIR }}/src" ]; then
-                TARGET="${{ env.CLONED_REPO_DIR }}/src"
-              elif [ -d "${{ env.CLONED_REPO_DIR }}/app" ]; then
-                TARGET="${{ env.CLONED_REPO_DIR }}/app"
-              else
-                # Use the root of cloned repo
-                TARGET="${{ env.CLONED_REPO_DIR }}"
-              fi
-            fi
+          # Determine target directory within cloned repo
+          if [ -n "${{ inputs.target_directory }}" ]; then
+            # User specified a subdirectory within the cloned repo
+            TARGET="${{ env.CLONED_REPO_DIR }}/${{ inputs.target_directory }}"
           else
-            # Using local code (current repo)
-            if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ inputs.target_directory }}" ]; then
-              TARGET="${{ inputs.target_directory }}"
+            # Auto-detect source directory in cloned repo
+            if [ -d "${{ env.CLONED_REPO_DIR }}/src" ]; then
+              TARGET="${{ env.CLONED_REPO_DIR }}/src"
+            elif [ -d "${{ env.CLONED_REPO_DIR }}/app" ]; then
+              TARGET="${{ env.CLONED_REPO_DIR }}/app"
             else
-              TARGET="${{ env.DEFAULT_TARGET }}"
+              # Use the root of cloned repo
+              TARGET="${{ env.CLONED_REPO_DIR }}"
             fi
           fi
           
           echo "TARGET_DIR=$TARGET" >> $GITHUB_ENV
-          
-          # Set other parameters
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            echo "ITERATIONS=${{ inputs.iterations }}" >> $GITHUB_ENV
-            echo "TARGET_COV=${{ inputs.target_coverage }}" >> $GITHUB_ENV
-            echo "OUT_DIR=${{ inputs.output_directory }}" >> $GITHUB_ENV
-          else
-            echo "ITERATIONS=${{ env.DEFAULT_ITERATIONS }}" >> $GITHUB_ENV
-            echo "TARGET_COV=${{ env.DEFAULT_COVERAGE }}" >> $GITHUB_ENV
-            echo "OUT_DIR=${{ env.DEFAULT_OUTDIR }}" >> $GITHUB_ENV
-          fi
+          echo "ITERATIONS=${{ inputs.iterations }}" >> $GITHUB_ENV
+          echo "MIN_COVERAGE=${{ inputs.min_coverage }}" >> $GITHUB_ENV
+          echo "OUT_DIR=${{ env.DEFAULT_OUTDIR }}" >> $GITHUB_ENV
           
           echo "📋 Configuration:"
           echo "  Repository URL: ${{ inputs.repo_url }}"
           echo "  Branch: ${{ inputs.repo_branch }}"
-          echo "  Target: $TARGET_DIR"
-          echo "  Iterations: $ITERATIONS"
-          echo "  Coverage Target: $TARGET_COV%"
-          echo "  Output: $OUT_DIR"
+          echo "  Target: $TARGET"
+          echo "  Iterations: ${{ inputs.iterations }}"
+          echo "  Min Coverage: ${{ inputs.min_coverage }}%"
+          echo "  Output: ${{ env.DEFAULT_OUTDIR }}"
       
       - name: Verify Target Directory
         run: |
@@ -174,7 +131,7 @@ jobs:
             --target "${{ env.TARGET_DIR }}" \
             --current-dir . \
             --iterations ${{ env.ITERATIONS }} \
-            --target-coverage ${{ env.TARGET_COV }} \
+            --target-coverage ${{ env.MIN_COVERAGE }} \
             --outdir "${{ env.OUT_DIR }}" \
           || {
             echo "❌ Orchestrator failed with exit code $?"
@@ -220,13 +177,11 @@ jobs:
           
           # Configuration
           echo "## ⚙️ Configuration" >> $GITHUB_STEP_SUMMARY
-          if [ -n "${{ inputs.repo_url }}" ]; then
-            echo "- **Repository:** ${{ inputs.repo_url }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Branch:** ${{ inputs.repo_branch }}" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "- **Repository:** ${{ inputs.repo_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch:** ${{ inputs.repo_branch }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Target Directory:** \`${{ env.TARGET_DIR }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Max Iterations:** ${{ env.ITERATIONS }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Target Coverage:** ${{ env.TARGET_COV }}%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Min Coverage:** ${{ env.MIN_COVERAGE }}%" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           # Coverage Results
@@ -306,16 +261,16 @@ jobs:
         run: |
           if [ -f "iteration_report.json" ]; then
             FINAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['final_coverage'])" 2>/dev/null || echo "0")
-            TARGET_COV=${{ env.TARGET_COV }}
+            MIN_COV=${{ env.MIN_COVERAGE }}
             
             echo "Final Coverage: ${FINAL_COV}%"
-            echo "Target Coverage: ${TARGET_COV}%"
+            echo "Min Coverage: ${MIN_COV}%"
             
-            if (( $(echo "$FINAL_COV >= $TARGET_COV" | bc -l) )); then
-              echo "✅ Coverage target achieved!"
+            if (( $(echo "$FINAL_COV >= $MIN_COV" | bc -l) )); then
+              echo "✅ Coverage threshold achieved!"
               exit 0
             else
-              echo "⚠️  Coverage target not met (${FINAL_COV}% < ${TARGET_COV}%)"
+              echo "⚠️  Coverage threshold not met (${FINAL_COV}% < ${MIN_COV}%)"
               echo "Consider running more iterations or adding manual tests"
               # Don't fail the workflow, just warn
               exit 0
