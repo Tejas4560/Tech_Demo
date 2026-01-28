@@ -1,0 +1,59 @@
+.venv
+myvenev/
+.myvenv
+.pytest_cache/
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+.env
+tests/
+htmlcov/
+cov_html/
+ci/
+.venv
+myvenv/
+.coverage
+coverage.xml
+venv/
+=4.2
+src/all_generation.zip
+.coverage
+coverage.xml
+# Ignore all JSON files
+*.json
+
+# Debug prompt folders/files
+debug_prompts/
+debug_prompt.txt
+
+# Codebase index generated directory
+.codebase_index/
+
+# Sonar scanner output directory
+.scannerwork/
+
+# Test result files
+# Project specific generated files
+src/all_generation.zip
+AUTO_FIXER_SUMMARY.md
+AUTO_FIX_README.md
+AUTO_FIX_TESTS_README.md
+CODE_FLOW_DIAGRAM.md
+DEMO_RESULTS.md
+PIPELINE_SUMMARY.md
+
+# Log files
+*.log
+backend_code.log
+clinic-*.log
+clinic.log
+clinic1.log
+clinic2.log
+clinic-after-git-push.log
+clinic-test-generation.log
+error_handler_auto_fixer.log
+error_out.log
+feature.log
+flask-high-coverage-repo.log
+food-menu-*.log
+full_error.txt
