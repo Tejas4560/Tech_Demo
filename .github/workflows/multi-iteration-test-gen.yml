@@ -1,0 +1,270 @@
+name: Multi-Iteration Test Generation
+
+on:
+  # Manual trigger with custom parameters
+  workflow_dispatch:
+    inputs:
+      target_directory:
+        description: 'Target directory to analyze (e.g., Backend_code, flask_high_coverage_repo/src)'
+        required: false
+        default: 'Backend_code'
+        type: string
+      iterations:
+        description: 'Maximum number of iterations'
+        required: false
+        default: '3'
+        type: string
+      target_coverage:
+        description: 'Target coverage percentage'
+        required: false
+        default: '90'
+        type: string
+      output_directory:
+        description: 'Output directory for generated tests'
+        required: false
+        default: 'tests/generated'
+        type: string
+  
+  # Auto-trigger on pull requests
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+  
+  # Auto-trigger on push to main
+  push:
+    branches: [ main ]
+    paths:
+      - '**.py'
+      - 'requirements.txt'
+
+env:
+  PYTHON_VERSION: '3.10'
+  DEFAULT_TARGET: 'Backend_code'
+  DEFAULT_ITERATIONS: '3'
+  DEFAULT_COVERAGE: '90'
+  DEFAULT_OUTDIR: 'tests/generated'
+
+jobs:
+  ai-test-generation:
+    name: AI Test Generation & Coverage Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          echo "✅ Dependencies installed successfully"
+      
+      - name: Configure Environment Variables
+        run: |
+          # Set target directory (use input or default)
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "TARGET_DIR=${{ inputs.target_directory }}" >> $GITHUB_ENV
+            echo "ITERATIONS=${{ inputs.iterations }}" >> $GITHUB_ENV
+            echo "TARGET_COV=${{ inputs.target_coverage }}" >> $GITHUB_ENV
+            echo "OUT_DIR=${{ inputs.output_directory }}" >> $GITHUB_ENV
+          else
+            echo "TARGET_DIR=${{ env.DEFAULT_TARGET }}" >> $GITHUB_ENV
+            echo "ITERATIONS=${{ env.DEFAULT_ITERATIONS }}" >> $GITHUB_ENV
+            echo "TARGET_COV=${{ env.DEFAULT_COVERAGE }}" >> $GITHUB_ENV
+            echo "OUT_DIR=${{ env.DEFAULT_OUTDIR }}" >> $GITHUB_ENV
+          fi
+          
+          echo "📋 Configuration:"
+          echo "  Target: $TARGET_DIR"
+          echo "  Iterations: $ITERATIONS"
+          echo "  Coverage Target: $TARGET_COV%"
+          echo "  Output: $OUT_DIR"
+      
+      - name: Verify Target Directory
+        run: |
+          if [ ! -d "${{ env.TARGET_DIR }}" ]; then
+            echo "❌ Error: Target directory '${{ env.TARGET_DIR }}' not found"
+            echo "Available directories:"
+            ls -la
+            exit 1
+          fi
+          
+          echo "✅ Target directory found: ${{ env.TARGET_DIR }}"
+          echo "📁 Contents:"
+          find ${{ env.TARGET_DIR }} -name "*.py" -type f | head -20
+      
+      - name: Run Multi-Iteration Orchestrator
+        env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
+          AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
+        run: |
+          echo "🚀 Starting Multi-Iteration Test Generation..."
+          echo "================================================"
+          
+          # Check if API keys are configured
+          if [ -z "$GROQ_API_KEY" ] && [ -z "$OPENAI_API_KEY" ] && [ -z "$AZURE_OPENAI_API_KEY" ]; then
+            echo "⚠️  Warning: No API keys found in secrets"
+            echo "Please configure GROQ_API_KEY, OPENAI_API_KEY, or AZURE_OPENAI_API_KEY"
+          fi
+          
+          # Run the orchestrator
+          python multi_iteration_orchestrator.py \
+            --target "${{ env.TARGET_DIR }}" \
+            --current-dir . \
+            --iterations ${{ env.ITERATIONS }} \
+            --target-coverage ${{ env.TARGET_COV }} \
+            --outdir "${{ env.OUT_DIR }}" \
+          || {
+            echo "❌ Orchestrator failed with exit code $?"
+            exit 1
+          }
+          
+          echo ""
+          echo "✅ Test generation completed!"
+      
+      - name: Analyze Results
+        if: always()
+        run: |
+          echo "📊 Analyzing Results..."
+          echo "======================="
+          
+          # Check for generated tests
+          if [ -d "${{ env.OUT_DIR }}" ]; then
+            TEST_COUNT=$(find ${{ env.OUT_DIR }} -name "test_*.py" -type f 2>/dev/null | wc -l)
+            echo "✅ Generated test files: $TEST_COUNT"
+            
+            if [ $TEST_COUNT -gt 0 ]; then
+              echo ""
+              echo "📝 Generated test files:"
+              find ${{ env.OUT_DIR }} -name "test_*.py" -type f -exec basename {} \;
+            fi
+          else
+            echo "⚠️  No test output directory found"
+          fi
+          
+          # Check for reports
+          echo ""
+          echo "📄 Generated reports:"
+          [ -f "iteration_report.json" ] && echo "  ✅ iteration_report.json" || echo "  ❌ iteration_report.json"
+          [ -f "coverage_gaps.json" ] && echo "  ✅ coverage_gaps.json" || echo "  ❌ coverage_gaps.json"
+          [ -f "coverage.xml" ] && echo "  ✅ coverage.xml" || echo "  ❌ coverage.xml"
+          [ -d "htmlcov" ] && echo "  ✅ htmlcov/" || echo "  ❌ htmlcov/"
+      
+      - name: Generate Summary
+        if: always()
+        run: |
+          echo "# 🤖 AI Test Generation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Configuration
+          echo "## ⚙️ Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Directory:** \`${{ env.TARGET_DIR }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Max Iterations:** ${{ env.ITERATIONS }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Target Coverage:** ${{ env.TARGET_COV }}%" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Coverage Results
+          if [ -f "iteration_report.json" ]; then
+            echo "## 📊 Coverage Results" >> $GITHUB_STEP_SUMMARY
+            
+            INITIAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['initial_coverage'])" 2>/dev/null || echo "N/A")
+            FINAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['final_coverage'])" 2>/dev/null || echo "N/A")
+            TOTAL_ITER=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['total_iterations'])" 2>/dev/null || echo "N/A")
+            TARGET_ACHIEVED=$(python3 -c "import json; print('✅ Yes' if json.load(open('iteration_report.json'))['summary']['target_achieved'] else '❌ No')" 2>/dev/null || echo "N/A")
+            
+            echo "- **Initial Coverage:** ${INITIAL_COV}%" >> $GITHUB_STEP_SUMMARY
+            echo "- **Final Coverage:** ${FINAL_COV}%" >> $GITHUB_STEP_SUMMARY
+            echo "- **Iterations Run:** ${TOTAL_ITER}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Target Achieved:** ${TARGET_ACHIEVED}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Generated Tests
+          if [ -d "${{ env.OUT_DIR }}" ]; then
+            TEST_COUNT=$(find ${{ env.OUT_DIR }} -name "test_*.py" -type f 2>/dev/null | wc -l)
+            echo "## 🧪 Generated Tests" >> $GITHUB_STEP_SUMMARY
+            echo "- **Test Files Generated:** ${TEST_COUNT}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Coverage Gaps
+          if [ -f "coverage_gaps.json" ]; then
+            echo "## 🔍 Coverage Analysis" >> $GITHUB_STEP_SUMMARY
+            
+            MISSING=$(python3 -c "import json; print(json.load(open('coverage_gaps.json'))['missing_statements'])" 2>/dev/null || echo "N/A")
+            TOTAL=$(python3 -c "import json; print(json.load(open('coverage_gaps.json'))['total_statements'])" 2>/dev/null || echo "N/A")
+            FILES_WITH_GAPS=$(python3 -c "import json; print(len(json.load(open('coverage_gaps.json'))['files_with_gaps']))" 2>/dev/null || echo "N/A")
+            
+            echo "- **Missing Statements:** ${MISSING}/${TOTAL}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Files with Gaps:** ${FILES_WITH_GAPS}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Download artifacts below to view detailed reports and generated tests." >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload Generated Tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-tests
+          path: |
+            ${{ env.OUT_DIR }}/
+          retention-days: 30
+          if-no-files-found: warn
+      
+      - name: Upload Coverage Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports
+          path: |
+            coverage.xml
+            coverage_gaps.json
+            htmlcov/
+          retention-days: 30
+          if-no-files-found: warn
+      
+      - name: Upload Iteration Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iteration-report
+          path: |
+            iteration_report.json
+          retention-days: 30
+          if-no-files-found: warn
+      
+      - name: Check Coverage Threshold
+        if: success()
+        run: |
+          if [ -f "iteration_report.json" ]; then
+            FINAL_COV=$(python3 -c "import json; print(json.load(open('iteration_report.json'))['summary']['final_coverage'])" 2>/dev/null || echo "0")
+            TARGET_COV=${{ env.TARGET_COV }}
+            
+            echo "Final Coverage: ${FINAL_COV}%"
+            echo "Target Coverage: ${TARGET_COV}%"
+            
+            if (( $(echo "$FINAL_COV >= $TARGET_COV" | bc -l) )); then
+              echo "✅ Coverage target achieved!"
+              exit 0
+            else
+              echo "⚠️  Coverage target not met (${FINAL_COV}% < ${TARGET_COV}%)"
+              echo "Consider running more iterations or adding manual tests"
+              # Don't fail the workflow, just warn
+              exit 0
+            fi
+          fi
