@@ -176,14 +176,14 @@ jobs:
         with:
           name: test-results
           path: |
-            ${{ github.workspace }}/coverage.xml
-            ${{ github.workspace }}/test-results.xml
-            ${{ github.workspace }}/htmlcov/
-            ${{ github.workspace }}/.pytest_*.json
-            ${{ github.workspace }}/auto_fixer_report.json
-            ${{ github.workspace }}/manual_test_result.json
-            ${{ github.workspace }}/coverage_gaps.json
-            ${{ github.workspace }}/summary.json
+            ${{ github.workspace }}/pipeline/coverage.xml
+            ${{ github.workspace }}/pipeline/test-results.xml
+            ${{ github.workspace }}/pipeline/htmlcov/
+            ${{ github.workspace }}/pipeline/.pytest_*.json
+            ${{ github.workspace }}/pipeline/auto_fixer_report.json
+            ${{ github.workspace }}/pipeline/manual_test_result.json
+            ${{ github.workspace }}/pipeline/coverage_gaps.json
+            ${{ github.workspace }}/pipeline/summary.json
           if-no-files-found: warn
       
       - name: Upload Coverage Reports
@@ -192,10 +192,10 @@ jobs:
         with:
           name: coverage-reports
           path: |
-            ${{ github.workspace }}/coverage.xml
-            ${{ github.workspace }}/htmlcov/
-            ${{ github.workspace }}/ast_full_analysis.json
-            ${{ github.workspace }}/ast_gap_analysis.json
+            ${{ github.workspace }}/pipeline/coverage.xml
+            ${{ github.workspace }}/pipeline/htmlcov/
+            ${{ github.workspace }}/pipeline/ast_full_analysis.json
+            ${{ github.workspace }}/pipeline/ast_gap_analysis.json
           if-no-files-found: warn
       
       - name: Extract Metrics for Outputs
