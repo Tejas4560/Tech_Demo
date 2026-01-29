@@ -329,6 +329,14 @@ PYCODE
       echo "SonarQube credentials not provided, skipping upload"
     fi
 
+    # Generate comprehensive summary
+    echo "Generating pipeline summary..."
+    if python3 "$CURRENT_DIR/generate_summary.py" --workspace "$CURRENT_DIR" --output "$CURRENT_DIR/summary.json"; then
+      echo "Summary generated: summary.json"
+    else
+      echo "Warning: Failed to generate summary"
+    fi
+
     echo "Pipeline completed successfully!"
     exit 0
   fi
@@ -556,6 +564,14 @@ Final coverage: ${FINAL_COVERAGE}%"
       echo "SonarQube credentials not provided, skipping upload"
     fi
 
+    # Generate comprehensive summary
+    echo "Generating pipeline summary..."
+    if python3 "$CURRENT_DIR/generate_summary.py" --workspace "$CURRENT_DIR" --output "$CURRENT_DIR/summary.json"; then
+      echo "Summary generated: summary.json"
+    else
+      echo "Warning: Failed to generate summary"
+    fi
+
     check_final_coverage
   else
     echo "No AI tests were generated"
@@ -766,6 +782,15 @@ Final coverage: ${COVERAGE}%"
     echo "SonarQube credentials not provided, skipping upload"
   fi
   echo ""
+  
+  # Generate comprehensive summary
+  echo "Generating pipeline summary..."
+  if python3 "$CURRENT_DIR/generate_summary.py" --workspace "$CURRENT_DIR" --output "$CURRENT_DIR/summary.json"; then
+    echo "Summary generated: summary.json"
+  else
+    echo "Warning: Failed to generate summary"
+  fi
+  
   check_final_coverage
 else
   echo "No AI-generated tests found. Pipeline cannot proceed."

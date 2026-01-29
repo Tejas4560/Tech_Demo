@@ -32,6 +32,14 @@ jobs:
   run-pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    outputs:
+      generated_tests_count: ${{ steps.extract_metrics.outputs.generated_tests_count }}
+      coverage_before: ${{ steps.extract_metrics.outputs.coverage_before }}
+      coverage_after: ${{ steps.extract_metrics.outputs.coverage_after }}
+      coverage_delta: ${{ steps.extract_metrics.outputs.coverage_delta }}
+      tests_passed: ${{ steps.extract_metrics.outputs.tests_passed }}
+      tests_failed: ${{ steps.extract_metrics.outputs.tests_failed }}
+      pipeline_status: ${{ steps.extract_metrics.outputs.pipeline_status }}
     
     steps:
       - name: Checkout Pipeline Code
@@ -113,6 +121,7 @@ jobs:
             ${{ github.workspace }}/auto_fixer_report.json
             ${{ github.workspace }}/manual_test_result.json
             ${{ github.workspace }}/coverage_gaps.json
+            ${{ github.workspace }}/summary.json
           if-no-files-found: warn
       
       - name: Upload Coverage Reports
@@ -127,12 +136,80 @@ jobs:
             ${{ github.workspace }}/ast_gap_analysis.json
           if-no-files-found: warn
       
+      - name: Extract Metrics for Outputs
+        id: extract_metrics
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          
+          # Extract coverage metrics
+          if [ -f coverage.xml ]; then
+            COVERAGE_AFTER=$(python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(f'{float(root.attrib.get(\"line-rate\", 0)) * 100:.2f}')" 2>/dev/null || echo "0")
+          else
+            COVERAGE_AFTER="0"
+          fi
+          
+          # Extract test count
+          if [ -d tests/generated ]; then
+            TEST_COUNT=$(find tests/generated -name 'test_*.py' -type f 2>/dev/null | wc -l)
+          else
+            TEST_COUNT="0"
+          fi
+          
+          # Extract test results from pytest JSON if available
+          TESTS_PASSED="N/A"
+          TESTS_FAILED="N/A"
+          if [ -f .pytest_combined.json ]; then
+            TESTS_PASSED=$(python3 -c "import json; data=json.load(open('.pytest_combined.json')); print(data.get('summary', {}).get('passed', 'N/A'))" 2>/dev/null || echo "N/A")
+            TESTS_FAILED=$(python3 -c "import json; data=json.load(open('.pytest_combined.json')); print(data.get('summary', {}).get('failed', 'N/A'))" 2>/dev/null || echo "N/A")
+          elif [ -f .pytest_manual.json ]; then
+            TESTS_PASSED=$(python3 -c "import json; data=json.load(open('.pytest_manual.json')); print(data.get('summary', {}).get('passed', 'N/A'))" 2>/dev/null || echo "N/A")
+            TESTS_FAILED=$(python3 -c "import json; data=json.load(open('.pytest_manual.json')); print(data.get('summary', {}).get('failed', 'N/A'))" 2>/dev/null || echo "N/A")
+          fi
+          
+          # Try to extract coverage_before from iteration_report.json or manual test coverage
+          COVERAGE_BEFORE="N/A"
+          if [ -f iteration_report.json ]; then
+            COVERAGE_BEFORE=$(python3 -c "import json; data=json.load(open('iteration_report.json')); print(data.get('initial_coverage', 'N/A'))" 2>/dev/null || echo "N/A")
+          fi
+          
+          # Calculate delta
+          if [[ "$COVERAGE_BEFORE" != "N/A" ]] && [[ "$COVERAGE_AFTER" != "0" ]]; then
+            COVERAGE_DELTA=$(python3 -c "print(f'{float($COVERAGE_AFTER) - float($COVERAGE_BEFORE):.2f}')" 2>/dev/null || echo "N/A")
+          else
+            COVERAGE_DELTA="N/A"
+          fi
+          
+          # Determine pipeline status
+          if [ "$COVERAGE_AFTER" != "0" ]; then
+            PIPELINE_STATUS="success"
+          else
+            PIPELINE_STATUS="completed"
+          fi
+          
+          # Set outputs
+          echo "generated_tests_count=$TEST_COUNT" >> $GITHUB_OUTPUT
+          echo "coverage_before=$COVERAGE_BEFORE" >> $GITHUB_OUTPUT
+          echo "coverage_after=$COVERAGE_AFTER" >> $GITHUB_OUTPUT
+          echo "coverage_delta=$COVERAGE_DELTA" >> $GITHUB_OUTPUT
+          echo "tests_passed=$TESTS_PASSED" >> $GITHUB_OUTPUT
+          echo "tests_failed=$TESTS_FAILED" >> $GITHUB_OUTPUT
+          echo "pipeline_status=$PIPELINE_STATUS" >> $GITHUB_OUTPUT
+          
+          echo "Extracted metrics:"
+          echo "  Generated tests: $TEST_COUNT"
+          echo "  Coverage before: $COVERAGE_BEFORE%"
+          echo "  Coverage after: $COVERAGE_AFTER%"
+          echo "  Coverage delta: $COVERAGE_DELTA pp"
+          echo "  Tests passed: $TESTS_PASSED"
+          echo "  Tests failed: $TESTS_FAILED"
+      
       - name: Generate Test Summary
         if: always()
         run: |
           cd ${{ github.workspace }}
           
-          echo "## Pipeline Results" >> $GITHUB_STEP_SUMMARY
+          echo "## 🤖 AI TestGen Pipeline Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
           if [ -f coverage.xml ]; then
@@ -162,4 +239,34 @@ jobs:
             echo "*Available in coverage-reports artifact*" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Pipeline completed!" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Pipeline completed!" >> $GITHUB_STEP_SUMMARY
+      
+      - name: Comment PR with Results
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: ai-testgen-results
+          message: |
+            ## 🤖 AI TestGen Results
+            
+            ### 📊 Coverage Metrics
+            | Metric | Value |
+            |--------|-------|
+            | **Coverage After** | ${{ steps.extract_metrics.outputs.coverage_after }}% |
+            | **Coverage Before** | ${{ steps.extract_metrics.outputs.coverage_before }}% |
+            | **Coverage Delta** | ${{ steps.extract_metrics.outputs.coverage_delta }} pp |
+            
+            ### 🧪 Test Results
+            | Metric | Value |
+            |--------|-------|
+            | **Generated Tests** | ${{ steps.extract_metrics.outputs.generated_tests_count }} files |
+            | **Tests Passed** | ${{ steps.extract_metrics.outputs.tests_passed }} |
+            | **Tests Failed** | ${{ steps.extract_metrics.outputs.tests_failed }} |
+            
+            ### 📁 Artifacts
+            - 📄 [Test Results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - 📊 [Coverage Reports](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            - 🔍 [Full Pipeline Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+            
+            ---
+            *Pipeline Status: ${{ steps.extract_metrics.outputs.pipeline_status }}* | *Run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*
