@@ -95,8 +95,9 @@ jobs:
       - name: Run AI Test Generation Pipeline
         env:
           # Support both workflow_dispatch (inputs) and pull_request (PR context)
-          REPO_URL: ${{ github.event.pull_request.head.repo.clone_url || inputs.repo_url || github.event.repository.clone_url }}
-          REPO_BRANCH: ${{ github.event.pull_request.head.ref || inputs.repo_branch || 'main' }}
+          # For PR events, use a default target repo (not the PR repo itself)
+          REPO_URL: ${{ inputs.repo_url || 'https://github.com/Tejas4560/flask_high_coverage_repo' }}
+          REPO_BRANCH: ${{ inputs.repo_branch || 'main' }}
           MIN_COVERAGE_THRESHOLD: ${{ inputs.min_coverage || '90' }}
           AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
           AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}
