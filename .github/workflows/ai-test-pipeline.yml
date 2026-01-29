@@ -31,6 +31,51 @@ on:
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize, reopened ]
+  
+  workflow_call:
+    inputs:
+      repo_url:
+        description: 'Git repository URL to test'
+        required: true
+        type: string
+      repo_branch:
+        description: 'Branch to checkout'
+        required: false
+        default: 'main'
+        type: string
+      min_coverage:
+        description: 'Minimum coverage threshold'
+        required: false
+        default: '90'
+        type: string
+      sonar_project_key:
+        description: 'SonarQube Project Key'
+        required: false
+        default: ''
+        type: string
+      sonar_project_name:
+        description: 'SonarQube Project Name'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      GROQ_API_KEY:
+        required: false
+      AZURE_OPENAI_API_KEY:
+        required: false
+      AZURE_OPENAI_ENDPOINT:
+        required: false
+      AZURE_OPENAI_DEPLOYMENT:
+        required: false
+      AZURE_OPENAI_API_VERSION:
+        required: false
+      SONAR_HOST_URL:
+        required: false
+      SONAR_TOKEN:
+        required: false
+      GIT_PUSH_TOKEN:
+        required: false
+
 
 jobs:
   run-pipeline:
