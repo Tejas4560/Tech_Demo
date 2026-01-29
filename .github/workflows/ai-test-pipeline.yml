@@ -106,15 +106,15 @@ jobs:
       - name: Clone Target Repository
         run: |
           echo "Cloning repository: ${{ inputs.repo_url }}"
-          cd ${{ github.workspace }}
+          cd ${{ github.workspace }}/pipeline
           git clone --branch ${{ inputs.repo_branch }} ${{ inputs.repo_url }} target_repo
           echo "Repository cloned successfully"
           echo ""
           echo "Workspace structure:"
-          ls -la ${{ github.workspace }}
+          ls -la ${{ github.workspace }}/pipeline
           echo ""
           echo "Target repo contents:"
-          ls -la ${{ github.workspace }}/target_repo
+          ls -la ${{ github.workspace }}/pipeline/target_repo
       
       - name: Install Dependencies
         run: |
