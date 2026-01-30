@@ -368,11 +368,10 @@ PYCODE
 
   rm -rf "./tests/generated"
 
-  if ! python multi_iteration_orchestrator.py \
+  if ! python -m src.gen \
     --target "$TARGET_DIR" \
-    --iterations 3 \
-    --target-coverage "$MIN_COVERAGE" \
-    --outdir "$CURRENT_DIR/tests/generated"; then
+    --outdir "$CURRENT_DIR/tests/generated" \
+    --force; then
     echo "Warning: AI test generation had issues, but continuing..."
   fi
 
