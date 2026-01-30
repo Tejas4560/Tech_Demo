@@ -445,3 +445,77 @@ def validate_code(code: str):
         except SyntaxError as e: return False, f"syntax error: {e}"
     
 def massage(code: str): return code
+
+def fix_placeholder_imports(code: str, project_modules: list = None, target_root: str = None) -> str:
+    """
+    Replace placeholder imports (your_module, my_module, etc.) with actual module names.
+
+    Args:
+        code: The generated test code
+        project_modules: List of actual module names from the project
+        target_root: Path to the target project root (to auto-detect modules)
+
+    Returns:
+        Code with fixed imports
+    """
+    import os
+
+    # Common placeholder patterns used by LLMs
+    placeholder_patterns = [
+        r'your_module', r'your_app', r'your_project',
+        r'my_module', r'my_app', r'my_project',
+        r'module_name', r'app_name', r'project_name',
+        r'the_module', r'the_app', r'main_module',
+        r'source_module', r'target_module',
+    ]
+
+    # Auto-detect project modules if not provided
+    if not project_modules and target_root:
+        project_modules = []
+        try:
+            target_path = pathlib.Path(target_root)
+            # Look for Python files in project root
+            for py_file in target_path.glob("*.py"):
+                module_name = py_file.stem
+                if not module_name.startswith('_') and module_name not in ['setup', 'conftest']:
+                    project_modules.append(module_name)
+            # Common main module names to prioritize
+            priority_modules = ['app', 'main', 'application', 'server', 'api', 'core']
+            project_modules = sorted(project_modules,
+                                     key=lambda x: (x not in priority_modules, x))
+        except Exception:
+            pass
+
+    if not project_modules:
+        # Default fallback - try common names
+        project_modules = ['app', 'main']
+
+    # Get the primary module (first one, usually 'app' or 'main')
+    primary_module = project_modules[0] if project_modules else 'app'
+
+    # Replace placeholder imports
+    fixed_code = code
+    for placeholder in placeholder_patterns:
+        # Replace in import statements: from your_module import X
+        fixed_code = re.sub(
+            rf'from\s+{placeholder}\s+import',
+            f'from {primary_module} import',
+            fixed_code,
+            flags=re.IGNORECASE
+        )
+        # Replace in import statements: import your_module
+        fixed_code = re.sub(
+            rf'import\s+{placeholder}(\s|$|,)',
+            f'import {primary_module}\\1',
+            fixed_code,
+            flags=re.IGNORECASE
+        )
+        # Replace in code references: your_module.something
+        fixed_code = re.sub(
+            rf'{placeholder}\.',
+            f'{primary_module}.',
+            fixed_code,
+            flags=re.IGNORECASE
+        )
+
+    return fixed_code

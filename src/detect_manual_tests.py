@@ -44,6 +44,7 @@ def find_common_test_root(test_dirs: List[str]) -> str:
                 return os.sep.join(parts[:i+1])
 
         # If no 'test' directory found, return the directory itself
+        # This handles cases where test files are in the project root
         return single_dir
 
     # Multiple directories - find common path
@@ -83,14 +84,19 @@ def find_all_manual_test_dirs(repo_root: str = ".") -> Dict[str, any]:
     Only includes folders that contain .py test files
     """
     candidate_dirs = {}
+    repo_root_abs = os.path.abspath(repo_root)
 
     for root, dirs, files in os.walk(repo_root):
         # Skip unwanted folders (cache, venv, etc)
         if any(skip in root.lower() for skip in ["__pycache__", ".git", "venv", "env"]):
             continue
 
-        # Include any folder under a test-related path
-        if not any("test" in part for part in root.lower().split(os.sep)):
+        # Check if this is a test-related path OR the root directory
+        is_root_dir = os.path.abspath(root) == repo_root_abs
+        is_test_path = any("test" in part for part in root.lower().split(os.sep))
+
+        # For non-root, non-test directories, skip
+        if not is_root_dir and not is_test_path:
             continue
 
         test_files = []

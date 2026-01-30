@@ -34,7 +34,7 @@ from ..test_generation.orchestrator import TestGenerationOrchestrator
 __all__ = ["generate_all", "main"]
 
 try:
-    from .postprocess import extract_python_only, massage, validate_code
+    from .postprocess import extract_python_only, massage, validate_code, fix_placeholder_imports
 except Exception as _e:
     print(f"Warning: postprocess import failed: {_e}; using fallbacks")
     import ast as _ast
@@ -707,6 +707,8 @@ def generate_all(analysis: Dict[str, Any], outdir: str = "tests/generated",
                 
                 # UNIVERSAL: Fix imports for any project structure
                 test_code = _fix_imports_for_universal_compatibility(test_code, target_root, analysis)
+                # Fix placeholder imports (your_module -> actual module names)
+                test_code = fix_placeholder_imports(test_code, target_root=str(target_root))
                 # NEW: sanitize parametrization mismatches automatically
                 test_code = _sanitize_parametrize_signature_mismatches(test_code)
                 

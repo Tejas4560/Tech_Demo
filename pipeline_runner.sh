@@ -329,6 +329,14 @@ PYCODE
       echo "SonarQube credentials not provided, skipping upload"
     fi
 
+    # Generate comprehensive summary
+    echo "Generating pipeline summary..."
+    if python3 "$CURRENT_DIR/generate_summary.py" --workspace "$CURRENT_DIR" --output "$CURRENT_DIR/summary.json"; then
+      echo "Summary generated: summary.json"
+    else
+      echo "Warning: Failed to generate summary"
+    fi
+
     echo "Pipeline completed successfully!"
     exit 0
   fi
@@ -360,11 +368,10 @@ PYCODE
 
   rm -rf "./tests/generated"
 
-  if ! python multi_iteration_orchestrator.py \
+  if ! python -m src.gen \
     --target "$TARGET_DIR" \
-    --iterations 3 \
-    --target-coverage "$MIN_COVERAGE" \
-    --outdir "$CURRENT_DIR/tests/generated"; then
+    --outdir "$CURRENT_DIR/tests/generated" \
+    --force; then
     echo "Warning: AI test generation had issues, but continuing..."
   fi
 
@@ -554,6 +561,14 @@ Final coverage: ${FINAL_COVERAGE}%"
       fi
     else
       echo "SonarQube credentials not provided, skipping upload"
+    fi
+
+    # Generate comprehensive summary
+    echo "Generating pipeline summary..."
+    if python3 "$CURRENT_DIR/generate_summary.py" --workspace "$CURRENT_DIR" --output "$CURRENT_DIR/summary.json"; then
+      echo "Summary generated: summary.json"
+    else
+      echo "Warning: Failed to generate summary"
     fi
 
     check_final_coverage
@@ -766,6 +781,15 @@ Final coverage: ${COVERAGE}%"
     echo "SonarQube credentials not provided, skipping upload"
   fi
   echo ""
+  
+  # Generate comprehensive summary
+  echo "Generating pipeline summary..."
+  if python3 "$CURRENT_DIR/generate_summary.py" --workspace "$CURRENT_DIR" --output "$CURRENT_DIR/summary.json"; then
+    echo "Summary generated: summary.json"
+  else
+    echo "Warning: Failed to generate summary"
+  fi
+  
   check_final_coverage
 else
   echo "No AI-generated tests found. Pipeline cannot proceed."
