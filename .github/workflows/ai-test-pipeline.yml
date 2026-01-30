@@ -269,39 +269,77 @@ jobs:
       - name: Generate Test Summary
         if: always()
         run: |
-          cd ${{ github.workspace }}
-          
+          cd ${{ github.workspace }}/pipeline
+
           echo "## 🤖 AI TestGen Pipeline Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
-          if [ -f coverage.xml ]; then
-            COVERAGE=$(python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(f'{float(root.attrib.get(\"line-rate\", 0)) * 100:.2f}')" 2>/dev/null || echo "0")
-            echo "**Coverage:** ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f manual_test_result.json ]; then
-            echo "### Manual Tests" >> $GITHUB_STEP_SUMMARY
-            python3 -c "import json; data=json.load(open('manual_test_result.json')); print(f'- **Found:** {data[\"manual_tests_found\"]}')" >> $GITHUB_STEP_SUMMARY 2>/dev/null || true
-          fi
-          
-          if [ -d tests/generated ]; then
-            TEST_COUNT=$(find tests/generated -name 'test_*.py' -type f 2>/dev/null | wc -l)
-            echo "### AI Generated Tests" >> $GITHUB_STEP_SUMMARY
-            echo "- **Generated Test Files:** ${TEST_COUNT}" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ -f ast_full_analysis.json ] || [ -f ast_gap_analysis.json ]; then
-            echo "### AST Analysis" >> $GITHUB_STEP_SUMMARY
-            if [ -f ast_full_analysis.json ]; then
-              echo "- **Full Code AST:** \`ast_full_analysis.json\`" >> $GITHUB_STEP_SUMMARY
+
+          # Parse summary.json for detailed metrics
+          if [ -f summary.json ]; then
+            # Extract metrics from summary.json
+            FINAL_COVERAGE=$(python3 -c "import json; data=json.load(open('summary.json')); print(f'{data[\"coverage\"][\"line_coverage\"]:.2f}')" 2>/dev/null || echo "N/A")
+            BRANCH_COVERAGE=$(python3 -c "import json; data=json.load(open('summary.json')); print(f'{data[\"coverage\"][\"branch_coverage\"]:.2f}')" 2>/dev/null || echo "N/A")
+            TESTS_TOTAL=$(python3 -c "import json; data=json.load(open('summary.json')); print(data['tests']['results']['total'])" 2>/dev/null || echo "N/A")
+            TESTS_PASSED=$(python3 -c "import json; data=json.load(open('summary.json')); print(data['tests']['results']['passed'])" 2>/dev/null || echo "N/A")
+            TESTS_FAILED=$(python3 -c "import json; data=json.load(open('summary.json')); print(data['tests']['results']['failed'])" 2>/dev/null || echo "N/A")
+            GENERATED_COUNT=$(python3 -c "import json; data=json.load(open('summary.json')); print(data['tests']['generated']['count'])" 2>/dev/null || echo "0")
+            MANUAL_FOUND=$(python3 -c "import json; data=json.load(open('summary.json')); print(data['tests']['manual']['found'])" 2>/dev/null || echo "False")
+            STATUS=$(python3 -c "import json; data=json.load(open('summary.json')); print(data['status'])" 2>/dev/null || echo "unknown")
+
+            # Coverage Results Table
+            echo "### 📊 Coverage Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| **Line Coverage** | ${FINAL_COVERAGE}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Branch Coverage** | ${BRANCH_COVERAGE}% |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Threshold** | ${{ inputs.min_coverage || '90' }}% |" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$FINAL_COVERAGE" != "N/A" ]; then
+              THRESHOLD=${{ inputs.min_coverage || '90' }}
+              if (( $(echo "$FINAL_COVERAGE >= $THRESHOLD" | bc -l) )); then
+                echo "| **Status** | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| **Status** | ❌ BELOW THRESHOLD |" >> $GITHUB_STEP_SUMMARY
+              fi
             fi
-            if [ -f ast_gap_analysis.json ]; then
-              echo "- **Gap-Focused AST:** \`ast_gap_analysis.json\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Test Results Table
+            echo "### 🧪 Test Results" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| **Total Tests** | ${TESTS_TOTAL} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **Passed** | ${TESTS_PASSED} ✅ |" >> $GITHUB_STEP_SUMMARY
+            if [ "$TESTS_FAILED" != "0" ] && [ "$TESTS_FAILED" != "N/A" ]; then
+              echo "| **Failed** | ${TESTS_FAILED} ❌ |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| **Failed** | 0 |" >> $GITHUB_STEP_SUMMARY
             fi
-            echo "*Available in coverage-reports artifact*" >> $GITHUB_STEP_SUMMARY
+            echo "| **Manual Tests Found** | ${MANUAL_FOUND} |" >> $GITHUB_STEP_SUMMARY
+            echo "| **AI Generated Files** | ${GENERATED_COUNT} |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+          else
+            # Fallback to coverage.xml if summary.json not available
+            if [ -f coverage.xml ]; then
+              COVERAGE=$(python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); root = tree.getroot(); print(f'{float(root.attrib.get(\"line-rate\", 0)) * 100:.2f}')" 2>/dev/null || echo "0")
+              echo "### 📊 Coverage" >> $GITHUB_STEP_SUMMARY
+              echo "**Final Coverage:** ${COVERAGE}%" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
+
+          # Artifacts section
+          echo "### 📁 Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Pipeline completed!" >> $GITHUB_STEP_SUMMARY
+          echo "- 📄 **test-results**: Coverage reports, test results, summary" >> $GITHUB_STEP_SUMMARY
+          echo "- 📊 **coverage-reports**: HTML coverage, AST analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **Pipeline completed!**" >> $GITHUB_STEP_SUMMARY
       
       - name: Comment PR with Results
         if: github.event_name == 'pull_request'
