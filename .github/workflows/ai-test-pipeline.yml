@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       repo_url:
-        description: 'Git repository URL to test (e.g., https://github.com/user/repo.git)'
-        required: true
+        description: 'Git repository URL (leave empty to auto-detect current repo)'
+        required: false
+        default: ''
         type: string
       repo_branch:
-        description: 'Branch to checkout (default: main)'
+        description: 'Branch to checkout (leave empty to auto-detect default branch)'
         required: false
-        default: 'main'
+        default: ''
         type: string
       min_coverage:
         description: 'Minimum coverage threshold (default: 90)'
@@ -35,13 +36,14 @@ on:
   workflow_call:
     inputs:
       repo_url:
-        description: 'Git repository URL to test'
-        required: true
+        description: 'Git repository URL to test (auto-detected if not provided)'
+        required: false
+        default: ''
         type: string
       repo_branch:
-        description: 'Branch to checkout'
+        description: 'Branch to checkout (auto-detected if not provided)'
         required: false
-        default: 'main'
+        default: ''
         type: string
       min_coverage:
         description: 'Minimum coverage threshold'
@@ -105,9 +107,45 @@ jobs:
       
       - name: Clone Target Repository
         run: |
-          echo "Cloning repository: ${{ inputs.repo_url }}"
           cd ${{ github.workspace }}/pipeline
-          git clone --branch ${{ inputs.repo_branch }} ${{ inputs.repo_url }} target_repo
+
+          # Auto-detect repository URL if not provided
+          REPO_URL="${{ inputs.repo_url }}"
+          if [ -z "$REPO_URL" ]; then
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            echo "Auto-detected repository: $REPO_URL"
+          else
+            echo "Using provided repository: $REPO_URL"
+          fi
+
+          # Auto-detect branch if not provided
+          REPO_BRANCH="${{ inputs.repo_branch }}"
+          if [ -z "$REPO_BRANCH" ] || [ "$REPO_BRANCH" = "main" ]; then
+            # Try to detect default branch using git ls-remote
+            echo "Detecting default branch..."
+            DEFAULT_BRANCH=$(git ls-remote --symref "$REPO_URL" HEAD 2>/dev/null | grep "ref:" | sed 's/.*refs\/heads\/\(.*\)\s.*/\1/' | head -1)
+
+            if [ -n "$DEFAULT_BRANCH" ]; then
+              REPO_BRANCH="$DEFAULT_BRANCH"
+              echo "Auto-detected branch: $REPO_BRANCH"
+            else
+              # Fallback: try main first, then master
+              if git ls-remote --heads "$REPO_URL" main | grep -q main; then
+                REPO_BRANCH="main"
+              elif git ls-remote --heads "$REPO_URL" master | grep -q master; then
+                REPO_BRANCH="master"
+              else
+                REPO_BRANCH="main"  # Final fallback
+              fi
+              echo "Using fallback branch: $REPO_BRANCH"
+            fi
+          else
+            echo "Using provided branch: $REPO_BRANCH"
+          fi
+
+          echo ""
+          echo "Cloning $REPO_URL (branch: $REPO_BRANCH)..."
+          git clone --branch "$REPO_BRANCH" "$REPO_URL" target_repo
           echo "Repository cloned successfully"
           echo ""
           echo "Workspace structure:"
