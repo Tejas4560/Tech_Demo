@@ -27,7 +27,12 @@ on:
         required: false
         default: ''
         type: string
-  
+      deploy_pages:
+        description: 'Deploy coverage report to GitHub Pages (true/false)'
+        required: false
+        default: 'true'
+        type: string
+
   pull_request:
     branches: [ main ]
     types: [ opened, synchronize, reopened ]
@@ -58,6 +63,11 @@ on:
         required: false
         default: ''
         type: string
+      deploy_pages:
+        description: 'Deploy coverage report to GitHub Pages'
+        required: false
+        default: 'true'
+        type: string
     secrets:
       GROQ_API_KEY:
         required: false
@@ -81,6 +91,11 @@ jobs:
   run-pipeline:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+      pull-requests: write
     outputs:
       generated_tests_count: ${{ steps.extract_metrics.outputs.generated_tests_count }}
       coverage_before: ${{ steps.extract_metrics.outputs.coverage_before }}
@@ -89,13 +104,14 @@ jobs:
       tests_passed: ${{ steps.extract_metrics.outputs.tests_passed }}
       tests_failed: ${{ steps.extract_metrics.outputs.tests_failed }}
       pipeline_status: ${{ steps.extract_metrics.outputs.pipeline_status }}
-    
+      coverage_report_url: ${{ steps.pages_url.outputs.pages_url }}
+
     steps:
       - name: Checkout Pipeline Code
         uses: actions/checkout@v4
         with:
           repository: Tejas4560/Tech_Demo
-          ref: TEST2
+          ref: TEST4
           path: pipeline
       
       - name: Set up Python
@@ -197,7 +213,30 @@ jobs:
             ${{ github.workspace }}/pipeline/ast_full_analysis.json
             ${{ github.workspace }}/pipeline/ast_gap_analysis.json
           if-no-files-found: warn
-      
+
+      - name: Deploy Coverage Report to GitHub Pages
+        id: deploy_pages
+        if: ${{ always() && (inputs.deploy_pages == 'true' || inputs.deploy_pages == '') }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ github.workspace }}/pipeline/htmlcov
+          destination_dir: coverage/${{ github.run_number }}
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy coverage report for run #${{ github.run_number }}'
+
+      - name: Set Pages URL
+        id: pages_url
+        if: ${{ always() && (inputs.deploy_pages == 'true' || inputs.deploy_pages == '') }}
+        run: |
+          REPO_OWNER="${{ github.repository_owner }}"
+          REPO_NAME="${{ github.event.repository.name }}"
+          PAGES_URL="https://${REPO_OWNER}.github.io/${REPO_NAME}/coverage/${{ github.run_number }}"
+          echo "pages_url=${PAGES_URL}" >> $GITHUB_OUTPUT
+          echo "📊 Coverage report will be available at: ${PAGES_URL}"
+
       - name: Extract Metrics for Outputs
         id: extract_metrics
         if: always()
@@ -331,6 +370,15 @@ jobs:
             fi
           fi
 
+          # Live Coverage Report Link
+          PAGES_URL="${{ steps.pages_url.outputs.pages_url }}"
+          if [ -n "$PAGES_URL" ]; then
+            echo "### 🌐 Live Coverage Report" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "👉 **[View Interactive Coverage Report](${PAGES_URL})**" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
           # Artifacts section
           echo "### 📁 Artifacts" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -362,11 +410,14 @@ jobs:
             | **Generated Tests** | ${{ steps.extract_metrics.outputs.generated_tests_count }} files |
             | **Tests Passed** | ${{ steps.extract_metrics.outputs.tests_passed }} |
             | **Tests Failed** | ${{ steps.extract_metrics.outputs.tests_failed }} |
-            
+
+            ### 🌐 Live Coverage Report
+            👉 **[View Interactive Coverage Report](${{ steps.pages_url.outputs.pages_url }})**
+
             ### 📁 Artifacts
             - 📄 [Test Results](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             - 📊 [Coverage Reports](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
             - 🔍 [Full Pipeline Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
-            
+
             ---
             *Pipeline Status: ${{ steps.extract_metrics.outputs.pipeline_status }}* | *Run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*
