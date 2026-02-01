@@ -217,15 +217,54 @@ jobs:
       - name: Deploy Coverage Report to GitHub Pages
         id: deploy_pages
         if: ${{ always() && (inputs.deploy_pages == 'true' || inputs.deploy_pages == '') }}
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ${{ github.workspace }}/pipeline/htmlcov
-          destination_dir: coverage/${{ github.run_number }}
-          keep_files: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-          commit_message: 'Deploy coverage report for run #${{ github.run_number }}'
+        run: |
+          cd ${{ github.workspace }}
+
+          # Check if htmlcov exists and has files
+          if [ ! -d "pipeline/htmlcov" ] || [ -z "$(ls -A pipeline/htmlcov 2>/dev/null)" ]; then
+            echo "⚠️ No htmlcov directory or empty - skipping Pages deployment"
+            exit 0
+          fi
+
+          echo "📁 Found htmlcov with $(ls pipeline/htmlcov | wc -l) files"
+
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clone or create gh-pages branch
+          git clone --depth=1 --branch gh-pages https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages-deploy 2>/dev/null || {
+            echo "Creating new gh-pages branch..."
+            mkdir gh-pages-deploy
+            cd gh-pages-deploy
+            git init
+            git checkout -b gh-pages
+            touch .nojekyll
+            git add .nojekyll
+            git commit -m "Initialize gh-pages"
+            cd ..
+          }
+
+          # Create coverage directory and copy files
+          mkdir -p gh-pages-deploy/coverage/${{ github.run_number }}
+          cp -r pipeline/htmlcov/* gh-pages-deploy/coverage/${{ github.run_number }}/
+
+          # Ensure .nojekyll exists
+          touch gh-pages-deploy/.nojekyll
+
+          # Commit and push
+          cd gh-pages-deploy
+          git add -A
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Deploy coverage report for run #${{ github.run_number }}"
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git 2>/dev/null || \
+              git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+            git push origin gh-pages --force
+            echo "✅ Coverage report deployed successfully!"
+          fi
 
       - name: Set Pages URL
         id: pages_url
