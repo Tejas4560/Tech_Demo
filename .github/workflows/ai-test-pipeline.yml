@@ -199,7 +199,48 @@ jobs:
           chmod +x bin/sonar-scanner
           echo "SonarQube Scanner installed"
           ./bin/sonar-scanner --version
-      
+
+      - name: Measure Initial Coverage (Before)
+        id: coverage_before
+        run: |
+          cd ${{ github.workspace }}/pipeline
+          source venv/bin/activate
+
+          echo "Measuring initial coverage before test generation..."
+
+          # Check if target_repo has existing tests
+          if [ -d "target_repo/tests" ] || [ -d "target_repo/test" ] || find target_repo -name "test_*.py" -type f 2>/dev/null | head -1 | grep -q .; then
+            echo "Found existing tests, running coverage measurement..."
+
+            # Install test dependencies in target repo if requirements exist
+            if [ -f "target_repo/requirements.txt" ]; then
+              pip install -r target_repo/requirements.txt 2>/dev/null || true
+            fi
+            if [ -f "target_repo/requirements-dev.txt" ]; then
+              pip install -r target_repo/requirements-dev.txt 2>/dev/null || true
+            fi
+
+            # Run existing tests with coverage
+            cd target_repo
+            PYTHONPATH=. python -m pytest --cov=. --cov-report=xml:coverage_before.xml --cov-report=term -q 2>/dev/null || true
+
+            if [ -f "coverage_before.xml" ]; then
+              COVERAGE_BEFORE=$(python3 -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage_before.xml'); root = tree.getroot(); print(f'{float(root.attrib.get(\"line-rate\", 0)) * 100:.2f}')" 2>/dev/null || echo "0")
+              echo "Initial coverage: ${COVERAGE_BEFORE}%"
+              echo "coverage_before=${COVERAGE_BEFORE}" >> $GITHUB_OUTPUT
+
+              # Save for later use
+              cp coverage_before.xml ${{ github.workspace }}/pipeline/coverage_before.xml
+            else
+              echo "Could not generate coverage report"
+              echo "coverage_before=0" >> $GITHUB_OUTPUT
+            fi
+            cd ..
+          else
+            echo "No existing tests found, initial coverage is 0%"
+            echo "coverage_before=0" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run AI Test Generation Pipeline
         env:
           # Support both workflow_dispatch (inputs) and pull_request (PR context)
@@ -346,11 +387,17 @@ jobs:
             TESTS_FAILED=$(python3 -c "import json; data=json.load(open('.pytest_manual.json')); print(data.get('summary', {}).get('failed', 'N/A'))" 2>/dev/null || echo "N/A")
           fi
           
-          # Try to extract coverage_before from iteration_report.json or manual test coverage
-          COVERAGE_BEFORE="N/A"
-          if [ -f iteration_report.json ]; then
-            COVERAGE_BEFORE=$(python3 -c "import json; data=json.load(open('iteration_report.json')); print(data.get('initial_coverage', 'N/A'))" 2>/dev/null || echo "N/A")
+          # Get coverage_before from the earlier measurement step
+          COVERAGE_BEFORE="${{ steps.coverage_before.outputs.coverage_before }}"
+          if [ -z "$COVERAGE_BEFORE" ] || [ "$COVERAGE_BEFORE" = "" ]; then
+            # Fallback: try to extract from iteration_report.json
+            if [ -f iteration_report.json ]; then
+              COVERAGE_BEFORE=$(python3 -c "import json; data=json.load(open('iteration_report.json')); print(data.get('initial_coverage', 'N/A'))" 2>/dev/null || echo "N/A")
+            else
+              COVERAGE_BEFORE="N/A"
+            fi
           fi
+          echo "Coverage before: $COVERAGE_BEFORE%"
           
           # Calculate delta
           if [[ "$COVERAGE_BEFORE" != "N/A" ]] && [[ "$COVERAGE_AFTER" != "0" ]]; then
