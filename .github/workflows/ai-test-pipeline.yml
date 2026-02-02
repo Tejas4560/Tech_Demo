@@ -18,6 +18,11 @@ on:
         required: false
         default: '90'
         type: string
+      delta_threshold:
+        description: 'Minimum coverage delta required (e.g., 0 = no regression, 5 = must improve by 5%)'
+        required: false
+        default: ''
+        type: string
       sonar_project_key:
         description: 'SonarQube Project Key (default: extracted from repo)'
         required: false
@@ -54,6 +59,11 @@ on:
         description: 'Minimum coverage threshold'
         required: false
         default: '90'
+        type: string
+      delta_threshold:
+        description: 'Minimum coverage delta required (0 = no regression allowed)'
+        required: false
+        default: ''
         type: string
       sonar_project_key:
         description: 'SonarQube Project Key'
@@ -107,6 +117,7 @@ jobs:
       tests_failed: ${{ steps.extract_metrics.outputs.tests_failed }}
       pipeline_status: ${{ steps.extract_metrics.outputs.pipeline_status }}
       coverage_report_url: ${{ steps.pages_url.outputs.pages_url }}
+      delta_check_passed: ${{ steps.extract_metrics.outputs.delta_check_passed }}
 
     steps:
       - name: Checkout Pipeline Code
@@ -347,14 +358,32 @@ jobs:
           else
             COVERAGE_DELTA="N/A"
           fi
-          
+
+          # Check delta threshold
+          DELTA_THRESHOLD="${{ inputs.delta_threshold }}"
+          DELTA_CHECK_PASSED="true"
+          DELTA_CHECK_MESSAGE=""
+
+          if [ -n "$DELTA_THRESHOLD" ] && [ "$COVERAGE_DELTA" != "N/A" ]; then
+            DELTA_MET=$(python3 -c "print('true' if float($COVERAGE_DELTA) >= float($DELTA_THRESHOLD) else 'false')" 2>/dev/null || echo "true")
+            if [ "$DELTA_MET" = "false" ]; then
+              DELTA_CHECK_PASSED="false"
+              DELTA_CHECK_MESSAGE="❌ Delta threshold not met: ${COVERAGE_DELTA}pp < ${DELTA_THRESHOLD}pp required"
+              echo "::error::Coverage delta (${COVERAGE_DELTA}pp) is below threshold (${DELTA_THRESHOLD}pp)"
+            else
+              DELTA_CHECK_MESSAGE="✅ Delta threshold met: ${COVERAGE_DELTA}pp >= ${DELTA_THRESHOLD}pp required"
+            fi
+          elif [ -n "$DELTA_THRESHOLD" ] && [ "$COVERAGE_DELTA" = "N/A" ]; then
+            DELTA_CHECK_MESSAGE="⚠️ Delta threshold configured but coverage_before not available for comparison"
+          fi
+
           # Determine pipeline status
           if [ "$COVERAGE_AFTER" != "0" ]; then
             PIPELINE_STATUS="success"
           else
             PIPELINE_STATUS="completed"
           fi
-          
+
           # Set outputs
           echo "generated_tests_count=$TEST_COUNT" >> $GITHUB_OUTPUT
           echo "coverage_before=$COVERAGE_BEFORE" >> $GITHUB_OUTPUT
@@ -363,12 +392,16 @@ jobs:
           echo "tests_passed=$TESTS_PASSED" >> $GITHUB_OUTPUT
           echo "tests_failed=$TESTS_FAILED" >> $GITHUB_OUTPUT
           echo "pipeline_status=$PIPELINE_STATUS" >> $GITHUB_OUTPUT
-          
+          echo "delta_check_passed=$DELTA_CHECK_PASSED" >> $GITHUB_OUTPUT
+          echo "delta_check_message=$DELTA_CHECK_MESSAGE" >> $GITHUB_OUTPUT
+
           echo "Extracted metrics:"
           echo "  Generated tests: $TEST_COUNT"
           echo "  Coverage before: $COVERAGE_BEFORE%"
           echo "  Coverage after: $COVERAGE_AFTER%"
           echo "  Coverage delta: $COVERAGE_DELTA pp"
+          echo "  Delta threshold: ${DELTA_THRESHOLD:-'not set'}"
+          echo "  Delta check: $DELTA_CHECK_MESSAGE"
           echo "  Tests passed: $TESTS_PASSED"
           echo "  Tests failed: $TESTS_FAILED"
       
@@ -407,6 +440,23 @@ jobs:
                 echo "| **Status** | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
               else
                 echo "| **Status** | ❌ BELOW THRESHOLD |" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+
+            # Delta Threshold Check
+            DELTA_THRESHOLD="${{ inputs.delta_threshold }}"
+            if [ -n "$DELTA_THRESHOLD" ]; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "### 📈 Delta Threshold Check" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| **Required Delta** | ≥ ${DELTA_THRESHOLD}pp |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Actual Delta** | ${{ steps.extract_metrics.outputs.coverage_delta }}pp |" >> $GITHUB_STEP_SUMMARY
+              if [ "${{ steps.extract_metrics.outputs.delta_check_passed }}" = "true" ]; then
+                echo "| **Status** | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| **Status** | ❌ FAILED |" >> $GITHUB_STEP_SUMMARY
               fi
             fi
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -470,7 +520,9 @@ jobs:
             | **Coverage After** | ${{ steps.extract_metrics.outputs.coverage_after }}% |
             | **Coverage Before** | ${{ steps.extract_metrics.outputs.coverage_before }}% |
             | **Coverage Delta** | ${{ steps.extract_metrics.outputs.coverage_delta }} pp |
-            
+            | **Delta Threshold** | ${{ inputs.delta_threshold || 'Not set' }} |
+            | **Delta Status** | ${{ steps.extract_metrics.outputs.delta_check_passed == 'true' && '✅ Passed' || (inputs.delta_threshold && '❌ Failed' || '➖ N/A') }} |
+
             ### 🧪 Test Results
             | Metric | Value |
             |--------|-------|
@@ -488,3 +540,15 @@ jobs:
 
             ---
             *Pipeline Status: ${{ steps.extract_metrics.outputs.pipeline_status }}* | *Run: [#${{ github.run_number }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*
+
+      - name: Check Delta Threshold
+        if: ${{ inputs.delta_threshold != '' && steps.extract_metrics.outputs.delta_check_passed == 'false' }}
+        run: |
+          echo "❌ Delta threshold check failed!"
+          echo ""
+          echo "Required delta:  >= ${{ inputs.delta_threshold }}pp"
+          echo "Actual delta:    ${{ steps.extract_metrics.outputs.coverage_delta }}pp"
+          echo ""
+          echo "The coverage improvement does not meet the required threshold."
+          echo "Please add more tests to improve coverage."
+          exit 1
