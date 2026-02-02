@@ -4,13 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       repo_url:
-        description: 'Git repository URL to test (e.g., https://github.com/user/repo.git)'
-        required: true
+        description: 'Git repository URL to test (leave empty to auto-detect)'
+        required: false
+        default: ''
         type: string
       repo_branch:
-        description: 'Branch to checkout (default: main)'
+        description: 'Branch to checkout (leave empty to auto-detect)'
         required: false
-        default: 'main'
+        default: ''
         type: string
       min_coverage:
         description: 'Minimum coverage threshold (default: 90)'
@@ -40,13 +41,14 @@ on:
   workflow_call:
     inputs:
       repo_url:
-        description: 'Git repository URL to test'
-        required: true
+        description: 'Git repository URL to test (auto-detected if not provided)'
+        required: false
+        default: ''
         type: string
       repo_branch:
-        description: 'Branch to checkout'
+        description: 'Branch to checkout (auto-detected if not provided)'
         required: false
-        default: 'main'
+        default: ''
         type: string
       min_coverage:
         description: 'Minimum coverage threshold'
