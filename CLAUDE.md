@@ -148,7 +148,7 @@ This pipeline is designed to be used across multiple Python projects via GitHub'
 │                                                                 │
 │  jobs:                                                          │
 │    ai-tests:                                                    │
-│      uses: Tejas4560/Tech_Demo/.../ai-test-pipeline.yml@Test3   │
+│      uses: Tejas4560/Tech_Demo/.../ai-test-pipeline.yml@TEST5   │
 │            ▲                                                    │
 └────────────│────────────────────────────────────────────────────┘
              │
@@ -193,7 +193,7 @@ on:
 
 jobs:
   ai-tests:
-    uses: Tejas4560/Tech_Demo/.github/workflows/ai-test-pipeline.yml@Test3
+    uses: Tejas4560/Tech_Demo/.github/workflows/ai-test-pipeline.yml@TEST5
     with:
       min_coverage: 85
     secrets:
@@ -251,7 +251,7 @@ In your `ai-testgen.yml`:
 ```yaml
 jobs:
   ai-tests:
-    uses: Tejas4560/Tech_Demo/.github/workflows/ai-test-pipeline.yml@Test3
+    uses: Tejas4560/Tech_Demo/.github/workflows/ai-test-pipeline.yml@TEST5
     with:
       min_coverage: 85
       deploy_pages: 'false'  # Disable GitHub Pages deployment
