@@ -123,9 +123,35 @@ jobs:
       
       - name: Clone Target Repository
         run: |
-          echo "Cloning repository: ${{ inputs.repo_url }}"
           cd ${{ github.workspace }}/pipeline
-          git clone --branch ${{ inputs.repo_branch }} ${{ inputs.repo_url }} target_repo
+
+          # Auto-detect repo URL if not provided
+          REPO_URL="${{ inputs.repo_url }}"
+          if [ -z "$REPO_URL" ]; then
+            REPO_URL="https://github.com/${{ github.repository }}.git"
+            echo "Auto-detected repo URL: $REPO_URL"
+          fi
+
+          # Auto-detect branch if not provided
+          REPO_BRANCH="${{ inputs.repo_branch }}"
+          if [ -z "$REPO_BRANCH" ]; then
+            # Try to get branch from github.head_ref (PR) or github.ref_name (push)
+            REPO_BRANCH="${{ github.head_ref }}"
+            if [ -z "$REPO_BRANCH" ]; then
+              REPO_BRANCH="${{ github.ref_name }}"
+            fi
+            # Fallback to default branch detection
+            if [ -z "$REPO_BRANCH" ] || [ "$REPO_BRANCH" = "" ]; then
+              REPO_BRANCH=$(git ls-remote --symref "$REPO_URL" HEAD | grep 'ref:' | sed 's/.*refs\/heads\///' | sed 's/\t.*//')
+              if [ -z "$REPO_BRANCH" ]; then
+                REPO_BRANCH="main"
+              fi
+            fi
+            echo "Auto-detected branch: $REPO_BRANCH"
+          fi
+
+          echo "Cloning repository: $REPO_URL (branch: $REPO_BRANCH)"
+          git clone --branch "$REPO_BRANCH" "$REPO_URL" target_repo
           echo "Repository cloned successfully"
           echo ""
           echo "Workspace structure:"
