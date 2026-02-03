@@ -1,0 +1,25 @@
+  name: AI Test Generation                                                                                                                                        
+                                                                                                                                                                  
+  on:                                                                                                                                                             
+    push:                                                                                                                                                         
+      branches: [main, master]                                                                                                                                    
+    pull_request:                                                                                                                                                 
+      branches: [main, master]                                                                                                                                    
+    workflow_dispatch:                                                                                                                                            
+                                                                                                                                                                  
+  jobs:                                                                                                                                                           
+    ai-tests:                                                                                                                                                     
+      uses: Tejas4560/Tech_Demo/.github/workflows/ai-test-pipeline.yml@TEST5                                                                                      
+      permissions:                                                                                                                                                
+        contents: write                                                                                                                                           
+        pages: write                                                                                                                                              
+        pull-requests: write                                                                                                                                      
+        id-token: write                                                                                                                                           
+      with:                                                                                                                                                       
+        min_coverage: 80                                                                                                                                          
+        delta_threshold: '0'    # No coverage regression allowed                                                                                                  
+        deploy_pages: 'true'                                                                                                                                      
+      secrets:                                                                                                                                                    
+        AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}                                                                                                 
+        AZURE_OPENAI_ENDPOINT: ${{ secrets.AZURE_OPENAI_ENDPOINT }}                                                                                               
+        AZURE_OPENAI_DEPLOYMENT: ${{ secrets.AZURE_OPENAI_DEPLOYMENT }}  

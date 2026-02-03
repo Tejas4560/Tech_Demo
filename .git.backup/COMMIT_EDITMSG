@@ -1,0 +1,8 @@
+fix: handle collection errors in auto-fixer
+
+- Parse collection errors from pytest JSON (collectors section)
+- Read entire file for collection errors, not just function
+- Update LLM prompt to fix entire files for collection errors
+- Replace entire file in AST patcher for collection errors
+
+This fixes: TypeError: HTTPException.__init__() missing required argument

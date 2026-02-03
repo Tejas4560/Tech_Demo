@@ -1,0 +1,17 @@
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+[remote "origin"]
+	url = https://github.com/Tejas4560/Tech_Demo.git
+	fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "TEST6"]
+	gk-last-accessed = 2026-02-03T18:49:10.755Z
+	gk-last-modified = 2026-02-03T18:49:10.755Z
+	remote = origin
+	merge = refs/heads/TEST6
+[branch "TEST7"]
+	vscode-merge-base = origin/TEST6
+	gk-last-accessed = 2026-02-03T20:14:34.415Z
+	gk-last-modified = 2026-02-03T20:14:34.415Z
