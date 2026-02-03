@@ -741,6 +741,21 @@ if [ "$TEST_COUNT" -gt 0 ]; then
     fi
 
     echo ""
+    echo "=========================================="
+    echo "DIAGNOSTIC: Checking test files after auto-fix"
+    echo "=========================================="
+    echo "Generated test files:"
+    find "$CURRENT_DIR/tests/generated" -name "test_*.py" -type f 2>/dev/null | while read f; do
+      echo "  - $f"
+      # Show first few lines to verify it's a valid test file
+      head -20 "$f" | grep -E "^(def test_|async def test_|class Test)" || echo "    (no test functions found in first 20 lines)"
+    done
+    echo ""
+    echo "Pytest collection check:"
+    pytest "$CURRENT_DIR/tests/generated" --collect-only -q 2>&1 | head -50
+    echo "=========================================="
+    echo ""
+
     echo "Re-running tests after auto-fix..."
     if ! pytest "$CURRENT_DIR/tests/generated" \
       --cov="$TARGET_DIR" \

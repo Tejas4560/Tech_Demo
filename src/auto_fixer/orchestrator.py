@@ -121,11 +121,21 @@ class AutoTestFixerOrchestrator:
             failures = self.failure_parser.run_and_parse(extra_pytest_args)
 
             if not failures:
-                print("No test failures found!")
+                print("✅ No test failures found!")
                 all_tests_fixed = True
                 break
 
-            print(f"Found {len(failures)} failing test(s)")
+            # Detailed breakdown of failures
+            collection_errors = [f for f in failures if f.test_name == "__collection_error__"]
+            test_failures = [f for f in failures if f.test_name != "__collection_error__"]
+
+            print(f"Found {len(failures)} failing test(s):")
+            if collection_errors:
+                print(f"  📦 {len(collection_errors)} collection error(s) (import-time failures):")
+                for ce in collection_errors:
+                    print(f"      • {ce.test_file}: {ce.exception_type}: {ce.error_message[:80]}...")
+            if test_failures:
+                print(f"  🔴 {len(test_failures)} test failure(s) (runtime failures):")
 
             # Limit failures to process per iteration (prevent infinite processing)
             failures_to_process = failures[:self.max_failures_per_iteration]
