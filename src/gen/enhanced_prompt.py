@@ -11,11 +11,13 @@ SYSTEM_MIN = (
     "UNIVERSAL TESTING REQUIREMENTS:\n"
     " - Use REAL imports and REAL code execution whenever possible\n"
     " - Test both success paths AND error conditions\n"
-    " - Include edge cases: empty inputs, None values, invalid data\n"
+    " - Include edge cases: empty inputs, None values, invalid data, boundary values\n"
     " - Test ALL public methods, properties, and class attributes\n"
-    " - Generate multiple test methods per class/function for maximum coverage\n"
+    " - Generate AT LEAST 3-5 test methods per class/function for maximum coverage\n"
     " - Return ONLY Python code, no markdown\n"
     " - Be completely framework-agnostic and project-structure-agnostic\n"
+    " - IMPORTANT: Generate tests for EVERY branch and conditional in the code\n"
+    " - Test ALL code paths including if/else branches, try/except, loops\n"
 )
 
 # Universal test templates for any project
@@ -29,8 +31,14 @@ UNIT_ENHANCED = (
     "- Test equality operations (__eq__, __hash__ if present)\n"
     "- Test exception handling and error conditions\n"
     "- Use parametrized tests for multiple input scenarios\n"
-    "- Target minimum 80% line coverage per file\n"
+    "- Target minimum 90% line coverage per file\n"
     "- Use REAL imports, avoid mocking unless absolutely necessary\n"
+    "- CRITICAL: Test ALL conditional branches (if/elif/else)\n"
+    "- CRITICAL: Test ALL loop conditions and iterations\n"
+    "- CRITICAL: Test boundary conditions (0, 1, -1, max values)\n"
+    "- Generate at least 5 test cases per function with edge cases\n"
+    "- For business logic: test all valid states and invalid transitions\n"
+    "- For data processing: test empty, single item, and multiple items\n"
 )
 
 INTEG_ENHANCED = (
@@ -55,7 +63,7 @@ E2E_ENHANCED = (
     "- Use real application setup and teardown\n"
 )
 
-MAX_TEST_FILES = {"unit": 4, "integ": 4, "e2e": 2}  
+MAX_TEST_FILES = {"unit": 6, "integ": 5, "e2e": 3}  # Increased for better coverage
 
 # Universal scaffold for any Python project
 UNIVERSAL_SCAFFOLD = '''
@@ -120,6 +128,20 @@ def universal_sample_data():
         "empty_dict": {},
         "boolean_true": True,
         "boolean_false": False,
+        # Ecommerce/business data
+        "product": {"id": 1, "name": "Test Product", "price": 99.99, "stock": 100, "category": "electronics"},
+        "order": {"id": 1, "total": 199.98, "status": "pending", "items": []},
+        "user": {"id": 1, "email": "test@example.com", "name": "Test User", "role": "customer"},
+        "cart": {"items": [], "total": 0.0, "user_id": 1},
+        "payment": {"method": "card", "status": "pending", "amount": 99.99},
+        "address": {"street": "123 Test St", "city": "Test City", "zip": "12345", "country": "US"},
+        # Numeric edge cases
+        "zero": 0,
+        "negative": -1,
+        "large_number": 999999999,
+        "decimal": 3.14159,
+        "prices": [0.01, 9.99, 99.99, 999.99],
+        "quantities": [0, 1, 5, 100, 1000],
     }
 
 @pytest.fixture
@@ -193,19 +215,22 @@ def targets_count(compact: Dict[str, Any], kind: str) -> int:
 
 def files_per_kind(compact: Dict[str, Any], kind: str) -> int:
     """Distribute ALL targets across appropriate number of files."""
-    
+
     total_targets = targets_count(compact, kind)
     if total_targets == 0:
         return 0
-    
-    targets_per_file = 50
-    
+
+    # Smaller groups = more focused tests = better coverage
+    # Reduced from 50 to 25 for more granular test generation
+    targets_per_file = 25
+
     if kind == "unit":
-        return max(1, (total_targets + targets_per_file - 1) // targets_per_file)
+        # More files = more focused tests per file
+        return max(2, (total_targets + targets_per_file - 1) // targets_per_file)
     elif kind == "e2e":
-        return max(1, (total_targets + 19) // 20)
+        return max(1, (total_targets + 14) // 15)  # Reduced from 20 to 15
     else:
-        return max(1, (total_targets + 29) // 30)
+        return max(1, (total_targets + 19) // 20)  # Reduced from 30 to 20
 
 def create_strategic_groups(targets: List[Dict[str, Any]], num_groups: int) -> List[List[Dict[str, Any]]]:
     if not targets or num_groups <= 0:
@@ -339,15 +364,26 @@ def _merge_universal_text():
     if is_gap_focused_mode():
         gap_guidance = (
             "\n"
-            "GAP-FOCUSED MODE REQUIREMENTS:\n"
-            "- PRIORITY: Generate tests that hit the specific UNCOVERED lines listed above\n"
-            "- Do NOT test already-covered code paths\n"
+            "GAP-FOCUSED MODE REQUIREMENTS (CRITICAL - HIGHEST PRIORITY):\n"
+            "- PRIORITY #1: Generate tests that hit the specific UNCOVERED lines listed above\n"
+            "- Do NOT test already-covered code paths - focus ONLY on gaps\n"
             "- Focus each test on covering multiple uncovered lines when possible\n"
             "- Target the specific functions/classes/methods marked as uncovered\n"
             "- Design tests to cover multiple uncovered lines per test when possible\n"
             "- Each test should directly exercise the uncovered code sections\n"
             "- Use the line numbers provided to guide your test design\n"
             "- Prioritize tests that will increase coverage percentage most\n"
+            "\n"
+            "SPECIFIC STRATEGIES FOR COVERAGE GAPS:\n"
+            "- For uncovered if/else branches: create tests that trigger BOTH conditions\n"
+            "- For uncovered exception handlers: create tests that raise those exceptions\n"
+            "- For uncovered loop bodies: ensure loops execute at least once\n"
+            "- For uncovered return statements: create tests that reach those returns\n"
+            "- For uncovered class methods: instantiate and call each method\n"
+            "- For uncovered validation: test with invalid inputs that trigger validation\n"
+            "- For uncovered error paths: test with inputs that cause errors\n"
+            "\n"
+            "COVERAGE TARGET: Generate enough tests to achieve 90%+ line coverage\n"
         )
         base_text += gap_guidance
     

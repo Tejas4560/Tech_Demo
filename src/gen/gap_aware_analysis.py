@@ -261,6 +261,15 @@ def enhance_prompt_with_coverage_context(coverage_gaps: Dict[str, Any]) -> str:
     context_lines.append("4. Prioritize covering multiple uncovered lines per test")
     context_lines.append("5. All targets in this request have coverage gaps that need filling")
     context_lines.append("")
+    context_lines.append("TEST GENERATION STRATEGIES:")
+    context_lines.append("-" * 80)
+    context_lines.append("- For each uncovered function: generate 3-5 test methods with different inputs")
+    context_lines.append("- Test edge cases: empty inputs, None, zero, negative numbers, boundary values")
+    context_lines.append("- Test error paths: invalid inputs that trigger exceptions or error handling")
+    context_lines.append("- Test all conditional branches: create inputs that trigger both if and else")
+    context_lines.append("- Test loops: empty iterations, single iteration, multiple iterations")
+    context_lines.append("- Use @pytest.mark.parametrize for comprehensive input variations")
+    context_lines.append("")
     
     # Add file-specific gap information
     files_with_gaps = coverage_gaps.get("files_with_gaps", {})
